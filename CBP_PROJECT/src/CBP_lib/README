@@ -1,0 +1,12 @@
+CODE of the linear algebra api
+
+cbp_distribute_mod.f90 : 
+                contains the fortran implementation that used mpi,  and most of the LA code.
+cbp_parallel,cbp_wrap.cpp,gemm.cpp,gemm_interfaces.cpp : 
+                contain the intranode implementation of the matmul.
+cpugemms: 
+     cpu routines to split code also to cpu (never used in practice).
+misc module 
+    is empty. In future it will contain some routines from cbp_distribute_mod 
+
+

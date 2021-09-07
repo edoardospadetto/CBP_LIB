@@ -1,0 +1,11 @@
+## Tests
+
+Here you find main files for tests.
+
+To compile them move in the ../ folder 
+
+make easytest NAME=CMPLX/DOUBLE/REAL/ZMPLX WHICH=adv/basic/.. 
+
+to run just type mpirun -np 3 ./bin/test($WHICH)($TYPE) 
+
+

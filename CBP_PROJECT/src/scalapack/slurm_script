@@ -1,0 +1,21 @@
+#!/bin/bash
+#SBATCH --time=10:00:00        # Walltime in hh:mm:ss
+#SBATCH --nodes=2    # Number of nodes
+#SBATCH --ntasks-per-node=1   # Number of MPI ranks per node
+#SBATCH --cpus-per-task=128      # Number of OpenMP threads for each MPI process/rank
+#SBATCH --mem-per-cpu=1800
+#SBATCH --account=cin_HPCqe  
+#SBATCH --partition=m100_usr_prod
+#SBATCH --err=error.txt
+#SBATCH --job-name=sqr2
+
+module load profile/advanced 
+module load spectrum_mpi
+module load gnu
+module load blas
+module load lapack 
+module load scalapack 
+
+
+
+mpirun -np 2 -host $SLURM_JOB_NODELIST ./qr_exec  2 1  > ./out/qr2.out

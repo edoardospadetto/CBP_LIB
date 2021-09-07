@@ -1,0 +1,272 @@
+#ifdef CBPCMPLX
+#define CTYPE complex
+#define CTYPE0 cmplx(0.0,0.0)
+#define CTYPE1 cmplx(1.0,0.0)
+#define MPI_CTYPE MPI_COMPLEX
+#endif
+
+#ifdef CBPDOUBLE 
+#define CTYPE double precision
+#define CTYPE0 0.0
+#define CTYPE1 1.0
+#define MPI_CTYPE MPI_DOUBLE_PRECISION
+#endif
+
+#ifdef CBPZMPLX 
+#define CTYPE0 dcmplx(0.0,0.0)
+#define CTYPE1 dcmplx(1.0,0.0)
+#define CTYPE double complex
+#define MPI_CTYPE MPI_DOUBLE_COMPLEX
+#endif
+
+#ifdef CBPREAL 
+#define CTYPE0 0.0
+#define CTYPE1 1.0
+#define CTYPE real
+#define MPI_CTYPE MPI_REAL
+#endif
+
+module kernels
+contains
+	
+	attributes(global) subroutine sax(x, y, a) ! sum val A to x 
+		implicit none
+		CTYPE :: x(:), y(:)
+		CTYPE, value :: a
+		integer :: i, n
+		n = size(x)
+		i = blockDim%x * (blockIdx%x - 1) + threadIdx%x
+		if (i <= n) y(i) = x(i) + a
+	end subroutine sax 
+
+
+    attributes(device) function dot_product_gpu(a,b) result(val) 
+	CTYPE, dimension(:) :: a, b 
+	integer :: ii , thedim
+	CTYPE :: val
+	val = CTYPE0 
+	
+	val = sum(conjg(a)*b)
+	 
+		
+    end function 
+    
+    attributes(device) subroutine renormalize(a,b,norm)  
+	CTYPE :: a, b 
+	double precision :: val  , norm 
+
+	val = sqrt(conjg(a)*a + conjg(b)*b  )
+	a = norm*a/val 
+	b = norm*b/val
+		
+    end subroutine
+    
+   
+         attributes(device) subroutine reduce_pivot(subA,c,s,sens) 
+         implicit none 
+	CTYPE :: c,s, blueM, bluedet
+	CTYPE , dimension(2,2) :: subA, evec, subAAT
+	CTYPE , dimension(2) :: eval, tempv
+	double precision :: norm ,sens
+	
+	!subAAT = subA
+	
+	subAAT(1,1) = subA(1,1)* conjg(subA(1,1)) + subA(1,2)*conjg(subA(2,1))
+	subAAT(1,2) = subA(1,1)* conjg(subA(2,1)) + subA(1,2)*conjg(subA(2,2))
+	subAAT(2,1) = subA(2,1)* conjg(subA(1,1)) + subA(2,2)*conjg(subA(1,2))
+	subAAT(2,2) = subA(2,1)* conjg(subA(1,2)) + subA(2,2)*conjg(subA(2,2))
+	
+	blueM = (subAAT(1,1) + subAAT(2,2)) / 2.d0
+	bluedet = subAAT(1,1)*subAAT(2,2)-subAAT(2,1)*subAAT(1,2)
+	eval = [ blueM - sqrt(blueM**2 - blueDET) , blueM + sqrt(blueM**2 - blueDET) ] 
+	
+	evec(:,1) =  [ -subAAT(1,2) , subAAT(1,1)-eval(1) ]
+	evec(:,2) =  [ -subAAT(1,2) , subAAT(1,1)-eval(2) ]
+	norm = evec(1,1)*conjg(evec(1,1))
+	
+	evec(:,1) = evec(:,1)/abs(sqrt(dot_product_gpu(evec(:,1),evec(:,1))))
+	evec(:,2) = evec(:,2)/abs(sqrt(dot_product_gpu(evec(:,2),evec(:,2))))
+	
+	if (abs(eval(1)-subAAT(2,2)) .lt. abs(eval(2)-subAAT(2,2)) ) then 
+		tempv = [ subAAT(1,1)**2-eval(1),subAAT(1,1)*subAAT(1,2)  ]
+	else 
+		tempv = [ subAAT(1,1)**2-eval(2),subAAT(1,1)*subAAT(1,2)  ]
+	end if 
+	
+	if ( abs(sqrt(dot_product_gpu(tempv, tempv))) .gt. sens) then 
+		c = conjg(tempv(1))/ abs(sqrt(dot_product_gpu(tempv, tempv)))
+		s = -(tempv(2)) / abs(sqrt(dot_product_gpu(tempv,tempv)))
+		
+		
+		!c = conjg(evec(2,2))
+		!s = -conjg(evec(1,2))
+		
+		
+		!cosc = cosc / abs(cosc*conjg(cosc)+sinc*conjg(sinc))
+		!sinc = sinc / abs(cosc*conjg(cosc)+sinc*conjg(sinc))
+	else 
+		c = cmplx(1.0,1.0) / 2
+		s = cmplx(1.0,1.0) / 2
+	end if 
+	
+	 
+		
+    end subroutine
+    
+    attributes(global) subroutine GulobReinsch_step(d, u, dd, uu, & !diagonal, abovediagonal,
+						    e, sens,&      !precision, sensibility to treat sine and cosine
+						    pivot,maxit, & !local pivot position, if missing = 0 , localmaximum iteration if 0... 
+						    side,oddeven, &       ! multiply left or right, odd indeces in parallel or even indices in parallel
+						    maxdim,lastproc )
+	implicit none
+
+	CTYPE :: d(:), u(:), dd(:), uu(:) , c(:), s(:) 
+	CTYPE, dimension(2,2) :: evec , subAAT
+	CTYPE, dimension(2) :: eval , tempv
+	CTYPE :: blueM, blueDet, a , b, cosc, sinc
+	double precision :: norm 
+	double precision, value :: e, sens
+	integer,value :: i, n, pivot, lr,lc
+	integer,value :: rowdim, coldim, side, oddeven, maxit, lastproc,maxdim
+
+	rowdim = maxdim 
+	coldim = maxdim
+	
+	!i is the index of the transformation, U1, U2, V3...
+	!if pivot even and oddeven = 0 -> thread 1 -> pivot
+	!if pivot odd and oddeven = 0 -> thread 1 -> pivot+1
+	!if pivot odd and oddeven = 1 -> thread 1 -> pivot
+	!if pivot even and oddeven = 1 -> thread 1 -> pivot+1
+	
+	i = 2*((blockidx%x-1)*blockdim%x + threadidx%x -1) + pivot+ abs(mod(pivot,2)-oddeven) !2*(max(pivot,1)/2) + 2-oddeven
+	 
+	
+	
+	!if pivot is 0 means no pivot to work on.
+	if (pivot .eq. 0 .and. side*oddeven .ne. 1) then 
+		i = i+2 !side = 0 	
+	end if 
+	
+	if (side .eq. 0) then  !SIDE IS RIGHT
+	    	
+	    	if (i .le. coldim-1)  then 
+		!--------------------------------------------
+			if ( i .eq. pivot .and. pivot .le. coldim-1-lastproc ) then !If i act on the pivot 
+			!affect row from i-1,i+1, col i, i+1
+			lr = pivot
+			lc = pivot 
+
+				if ( abs(u(lr)) .lt. e ) then 
+				!if pivot element is small do nothing 
+					cosc = 1.0 
+					sinc = 0.0
+				else 
+					subAAT(1,:) = [d(lr),u(lr)]
+					subAAT(2,:) = [dd(lr+1),d(lr+1)]
+					
+					call reduce_pivot(subAAT, cosc , sinc,sens ) 
+				
+				end if 
+			else if (pivot.eq.coldim-1 .and. i .eq. pivot .and. lastproc .eq. 1 ) then 
+				if ( sqrt(abs( u(i)*conjg(u(i)) + d(i)*conjg(d(i)) )) .gt. sens) then 
+					
+					cosc = d(i) /  sqrt(abs(   u(i)*conjg(u(i))  +  d(i)*conjg(d(i))  ))
+					sinc = - conjg( u(i) ) /  sqrt(abs( u(i)*conjg(u(i)) + d(i)*conjg(d(i)) ))
+					
+				else 
+					cosc = 1.0
+					sinc = 0.0
+				end if
+			
+				
+			else  !if i act on the others
+			    	!affect row from i-1,i+1, col i, i+1
+				if ( sqrt(abs( u(i-1)*conjg(u(i-1)) + uu(i-1)*conjg(uu(i-1)) )) .gt. sens) then 
+					cosc = u(i-1) /  sqrt(abs(   u(i-1)*conjg(u(i-1))  +  uu(i-1)*conjg(uu(i-1))  ))
+					sinc = - conjg( uu(i-1) ) /  sqrt(abs( u(i-1)*conjg(u(i-1)) + uu(i-1)*conjg(uu(i-1)) ))
+					
+					
+				else 
+					subAAT(1,:)= [d(i) , u(i)]
+					subAAT(2,:)= [dd(i+1),d(i+1)]					
+					
+					call reduce_pivot(subAAT,cosc,sinc,sens) 
+					!cosc = 1.0
+					!sinc = 0.0
+				end if 
+				
+					
+			end if !Act on Pivot or on the others
+			 call renormalize(cosc,sinc,dble(1.0))
+			!update
+            a = u(i-1)
+            b = uu(i-1)
+			u(i-1) =  a*conjg(cosc)  - b*sinc
+			uu(i-1) = a*conjg(sinc)  + b*cosc
+			
+			!call renormalize(u(i-1),uu(i-1), sqrt(abs(a)**2+abs(b)**2))
+			
+			a = d(i)
+            b = u(i)
+			d(i) =    a*conjg(cosc)    - b*sinc
+			u(i) =    a*conjg(sinc)    + b*cosc
+			
+			!call renormalize(d(i),u(i), sqrt(abs(a)**2+abs(b)**2))
+			
+			a = dd(i+1)
+            b = d(i+1)
+                        
+             
+			dd(i+1) = a*conjg(cosc) - b*sinc
+			d(i+1) =  a*conjg(sinc) + b*cosc
+			
+			
+			!call renormalize(dd(i+1),d(i+1), sqrt(abs(a)**2+abs(b)**2))
+		!--------------------------------------------
+		end if !Good iteration to do 
+        
+		
+
+	else if (side .eq. 1) then 
+		if ( i .le. rowdim .and. i .le. maxit) then 
+		      	!affect row from i-1,i+1, col i, i+1
+			if ( sqrt(abs( d(i)*conjg(d(i))+dd(i+1)*conjg(dd(i+1)))) .gt. sens) then 
+				cosc = d(i) /  sqrt(abs( d(i)*conjg(d(i))+dd(i+1)*conjg(dd(i+1))))
+				sinc = dd(i+1)  /  sqrt(abs( d(i)*conjg(d(i))+dd(i+1)*conjg(dd(i+1))))
+				
+				!cosc = cosc / abs(cosc*conjg(cosc)+sinc*conjg(sinc))
+				!sinc = sinc / abs(cosc*conjg(cosc)+sinc*conjg(sinc))
+			else 
+				cosc = CTYPE1
+				sinc = CTYPE0
+			end if 
+		!update
+			call renormalize(cosc,sinc,dble(1.0))
+			a = d(i)
+            b = dd(i+1)
+			dd(i+1)= -a*sinc          + b*cosc
+			d(i) =   a*conjg(cosc)    + b*conjg(sinc)
+			
+			!call renormalize(dd(i+1),d(i), sqrt(abs(a)**2+abs(b)**2))
+		
+			
+			a = u(i)
+            b = d(i+1)
+			d(i+1) = -a*sinc           + b*cosc
+			u(i) =    a*conjg(cosc)    + b*conjg(sinc) 
+			
+			!call renormalize(d(i+1),u(i), sqrt(abs(a)**2+abs(b)**2))
+			
+			a = uu(i)
+            b = u(i+1)
+			u(i+1) = -a*sinc          + b*cosc
+			uu(i) =   a*conjg(cosc)   + b*conjg(sinc)
+			
+			!call renormalize(u(i+1),uu(i), sqrt(abs(a)**2+abs(b)**2))
+			
+		end if 
+	end if
+	
+
+  end subroutine  
+end module kernels

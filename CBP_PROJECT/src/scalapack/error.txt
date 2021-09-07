@@ -1,0 +1,47 @@
+malloc(): smallbin double linked list corrupted
+
+Program received signal SIGABRT: Process abort signal.
+
+Backtrace for this error:
+#0  0x2000000504d7 in ???
+#1  0x2000008a3798 in ???
+#2  0x200000883bab in ???
+#3  0x2000008ef8bb in ???
+#4  0x2000008f92b7 in ???
+#5  0x2000008fd37b in ???
+#6  0x2000008ffe53 in ???
+#7  0x200000fcba73 in ???
+#8  0x2000003050cb in ???
+#9  0x2000003064f3 in ???
+#10  0x200000350343 in ???
+#11  0x100617bf in ???
+#12  0x1002994b in ???
+#13  0x10059653 in ???
+#14  0x1004f26b in ???
+#15  0x1001049b in ???
+#16  0x10009757 in ???
+#17  0x1000ae03 in ???
+#18  0x100041f3 in ???
+#19  0x2000008841f7 in ???
+#20  0x2000008843e3 in ???
+#21  0xffffffffffffffff in ???
+--------------------------------------------------------------------------
+Primary job  terminated normally, but 1 process returned
+a non-zero exit code. Per user-direction, the job has been aborted.
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+mpirun noticed that process rank 1 with PID 49874 on node r224n18 exited on signal 6 (Aborted).
+--------------------------------------------------------------------------
+slurmstepd: error: *** JOB 4004521 ON r250n13 CANCELLED AT 2021-08-09T23:47:47 DUE TO TIME LIMIT ***
+slurmstepd: error: *** JOB 4004525 ON r210n08 CANCELLED AT 2021-08-10T01:30:58 DUE TO TIME LIMIT ***
+--------------------------------------------------------------------------
+ORTE has lost communication with a remote daemon.
+
+  HNP daemon   : [[16200,0],0] on node r210n08
+  Remote daemon: [[16200,0],3] on node r254n09
+
+This is usually due to either a failure of the TCP network
+connection to the node, or possibly an internal failure of
+the daemon itself. We cannot recover from this failure, and
+therefore will terminate the job.
+--------------------------------------------------------------------------

@@ -1,0 +1,25 @@
+#!/bin/bash
+#SBATCH --time=10:00:00        # Walltime in hh:mm:ss
+#SBATCH --nodes=4             # Number of nodes
+#SBATCH --ntasks-per-node=1   # Number of MPI ranks per node
+#SBATCH --cpus-per-task=4      # Number of OpenMP threads for each MPI process/rank
+#SBATCH --mem=200000  
+#SBATCH --gres=gpu:4            # gpu
+#SBATCH --account=cin_HPCqe  
+#SBATCH --job-name=jobname
+#SBATCH --partition=m100_usr_prod
+#SBATCH --err=error.txt
+
+export omp_num_threads=32
+module load profile/advanced
+module load gnu
+module load openmpi
+module load cuda/10.1
+
+for test in $(ls tests | grep .bin)
+do 	
+	type=${test%??????????.???}
+	type=${type^^}
+	mpirun -np 4 ./bin/test${type:30} ${test} 5 4
+
+done

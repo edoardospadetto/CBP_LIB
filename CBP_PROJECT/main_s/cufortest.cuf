@@ -1,0 +1,249 @@
+#define CTYPE double complex
+#define CTYPE1 dcmplx(1.0,0.0) 
+#define CTYPE0 dcmplx(0.0,0.0)
+
+module mathOps
+contains
+	
+
+
+
+    attributes(device) function dot_product(a,b) result(val) 
+	CTYPE, dimension(:) :: a, b 
+	integer :: ii , thedim
+	CTYPE :: val
+	val = CTYPE0 
+	
+	val = sum(conjg(a)*b)
+	 
+		
+    end function 
+    attributes(global) subroutine gulob_reinsch_step(d, u, dd, uu, c, s, & !diagonal, abovediagonal,cosine, since
+						    e, sens,&      !precision, sensibility to treat sine and cosine
+						    pivot,maxit, & !local pivot position, if missing = 0 , localmaximum iteration if 0... 
+						    side,oddeven, &       ! multiply left or right, odd indeces in parallel or even indices in parallel
+						    rowdim,coldim, &	! dimension of the block
+						    lastproc)     !last mpi process that handles
+    
+	implicit none
+
+	CTYPE :: d(:), u(:), dd(:), uu(:) , c(:), s(:) 
+	CTYPE, dimension(2,2) :: evec , subAAT
+	CTYPE, dimension(2) :: eval , tempv
+	CTYPE :: blueM, blueDet, a , b
+	double precision :: norm 
+	double precision, value :: e, sens
+	integer,value :: i, n, pivot, lr,lc
+	integer,value :: rowdim, coldim, side, oddeven, maxit, lastproc
+
+	!i is the index of the transformation, U1, U2, V3...
+	i = 2*((blockidx%x-1)*blockdim%x + threadidx%x -1) + 2*(max(pivot,1)/2) + 2-oddeven
+	!if pivot is 0 means no pivot to work on.
+	
+	if (side .eq. 0) then  !SIDE IS RIGHT
+	    	if (i .le. coldim-1 .and. i .le. maxit )  then 
+		!--------------------------------------------
+			if ( i .eq. pivot .and. pivot .lt. coldim-1) then !If i act on the pivot 
+			!affect row from i-1,i+1, col i, i+1
+			lr = pivot
+			lc = pivot 
+
+				if ( abs(u(lr)) .lt. e ) then 
+				!if pivot element is small do nothing 
+					c(i) = 1.0 
+					s(i) = 0.0
+				else 
+					subAAT(1,:) = [d(lr),u(lr)]
+					subAAT(2,:) = [dd(lr+1),d(lr+1)]
+					!subAAT = matmul(transpose(conjg(subAAT)),subAAT)
+					
+					blueM = (subAAT(1,1) + subAAT(2,2)) / 2.d0
+					bluedet = subAAT(1,1)*subAAT(2,2)-subAAT(2,1)*subAAT(1,2)
+					eval = [ blueM - sqrt(blueM**2 - blueDET) , blueM + sqrt(blueM**2 - blueDET) ] 
+					
+					evec(:,1) =  [ -subAAT(lr,lc+1) , subAAT(lr,lc)-eval(1) ]
+					evec(:,2) =  [ -subAAT(lr,lc+1) , subAAT(lr,lc)-eval(2) ]
+					norm = evec(1,1)*conjg(evec(1,1))
+					
+					evec(:,1) = evec(:,1)/abs(sqrt(dot_product(evec(:,1),evec(:,1))))
+					evec(:,2) = evec(:,2)/abs(sqrt(dot_product(evec(:,2),evec(:,2))))
+					
+					if (abs(eval(1)-subAAT(2,2)) .lt. abs(eval(2)-subAAT(2,2)) ) then 
+						tempv = [ d(lr)**2-eval(1),d(lr)*u(lr) ]
+					else 
+						tempv = [ d(lr)**2-eval(2),d(lr)*u(lr) ]
+					end if 
+					
+					if ( abs(sqrt(dot_product(tempv, tempv))) .gt. sens) then 
+						c(i) = conjg(tempv(1))/ abs(sqrt(dot_product(tempv, tempv)))
+						s(i) = -(tempv(2)) / abs(sqrt(dot_product(tempv,tempv)))
+					else 
+						c(i) = CTYPE1
+						s(i) = CTYPE0 
+					end if 
+				end if 
+			else if (pivot.eq.coldim-1 .and.  i .eq. pivot ) then 
+				if ( sqrt(abs( u(i)*conjg(u(i)) + d(i)*conjg(d(i)) )) .gt. sens) then 
+					c(i) = d(i) /  sqrt(abs(   u(i)*conjg(u(i))  +  d(i)*conjg(d(i))  ))
+					s(i) = - conjg( u(i) ) /  sqrt(abs( u(i)*conjg(u(i)) + d(i)*conjg(d(i)) ))
+				else 
+					c(i) = 1.0
+					s(i) = 0.0
+				end if 
+				
+			else  !if i act on the others
+			    	!affect row from i-1,i+1, col i, i+1
+				if ( sqrt(abs( u(i-1)*conjg(u(i-1)) + uu(i-1)*conjg(uu(i-1)) )) .gt. sens) then 
+					c(i) = u(i-1) /  sqrt(abs(   u(i-1)*conjg(u(i-1))  +  uu(i-1)*conjg(uu(i-1))  ))
+					s(i) = - conjg( uu(i-1) ) /  sqrt(abs( u(i-1)*conjg(u(i-1)) + uu(i-1)*conjg(uu(i-1)) ))
+				else 
+					c(i) = 1.0
+					s(i) = 0.0
+				end if 
+				
+					
+			end if !Act on Pivot or on the others
+			
+			!update
+                        a = u(i-1)
+                        b = uu(i-1)
+			u(i-1) =  a*conjg(c(i))  - b*s(i)
+			uu(i-1) = a*conjg(s(i))  + b*c(i)
+			a = d(i)
+                        b = u(i)
+			d(i) =    a*conjg(c(i))    - b*s(i)
+			u(i) =    a*conjg(s(i))    + b*c(i)
+			a = dd(i+1)
+                        b = d(i+1)
+			dd(i+1) = a*conjg(c(i)) - b*s(i)
+			d(i+1) =  a*conjg(s(i)) + b*c(i)
+		end if !Good iteration to do 
+        
+		
+
+	else if (side .eq. 1) then 
+		if ( i .le. rowdim-2+lastproc .and. i .le. maxit) then 
+		      	!affect row from i-1,i+1, col i, i+1
+			if ( sqrt(abs( d(i)*conjg(d(i))+dd(i+1)*conjg(dd(i+1)))) .gt. sens) then 
+				c(i) = d(i) /  sqrt(abs( d(i)*conjg(d(i))+dd(i+1)*conjg(dd(i+1))))
+				s(i) = dd(i+1)  /  sqrt(abs( d(i)*conjg(d(i))+dd(i+1)*conjg(dd(i+1))))
+			else 
+				c(i) = CTYPE1
+				s(i) = CTYPE0
+			end if 
+		!update
+			a = d(i)
+                        b = dd(i+1)
+			dd(i+1)= -a*s(i)           + b*c(i)
+			d(i) =   a*conjg(c(i))    + b*conjg(s(i))
+			a = u(i)
+                        b = d(i+1)
+			d(i+1) = -a*s(i)           + b*c(i)
+			u(i) =    a*conjg(c(i))    + b*conjg(s(i)) 
+			a = uu(i)
+                        b = u(i+1)
+			u(i+1) = -a*s(i)          + b*c(i)
+			uu(i) =   a*conjg(c(i))   + b*conjg(s(i))
+			
+		end if 
+	end if
+	
+
+  end subroutine  
+end module mathOps
+
+program testgulob
+  use mathOps
+  use cudafor
+  implicit none
+  integer, parameter :: N = 5
+  !x diagonal, y offdiagonal, y can have N or N-1 
+  real :: helpx(N),helpy(N) 
+  CTYPE :: d(N), u(N),dd(N),uu(N),s(N),c(N)
+  CTYPE , dimension(N,N+1) :: M
+  double precision :: e
+  CTYPE, device :: d_d(N), u_d(N), s_d(N), c_d(N), dd_d(N), uu_d(N)
+  integer :: pivot, side, oddeven, it, maxit , lastproc, rowdim, coldim, ii
+  type(dim3) :: grid, tBlock
+  
+
+  e = 1e-20
+  tBlock = dim3(1,1,1)
+  grid = dim3(4,1,1)
+  do ii =1, 30
+  call random_number(helpx)
+  end do 
+  call random_number(helpx)
+  call random_number(helpy)
+ 
+  d = cmplx(helpx,helpy)*10
+  call random_number(helpx)
+  call random_number(helpy)
+ 
+  u = cmplx(helpx,helpy)*10
+  u(N) = CTYPE0
+  dd = CTYPE0	
+  M = CTYPE0	
+  rowdim = N 
+  coldim = N 
+  lastproc = 1 
+   
+  dd_d = 0 
+  d_d = d
+  u_d = u 
+  uu_d = 0 
+  it = 0 
+  pivot = 1
+  do while(.True.)
+  maxit = (it+2)/2
+  oddeven =  1-mod(it,4)/2 !first it is odd, second is odd, third even , 4th even , 5 odd.. 
+  side = mod(it,2)
+  it = it+1
+  
+  !If pivot and neighbours are low. 
+  if (  (pivot .lt. coldim-1 .and. abs(u(pivot))+abs(uu(pivot))+abs(dd(pivot+1)) .lt. 3*e) .or. & 
+  	(pivot .eq. coldim-1 .and. abs(u(pivot))+abs(dd(pivot+1)) .lt. 2*e ))then  
+	pivot = pivot+1	
+	if (pivot .eq. N) then 
+	exit 
+	end if
+  end if 
+	 call gulob_reinsch_step<<<tBlock,grid>>>(d_d, u_d, dd_d, uu_d, c_d, s_d, & !diagonal, abovediagonal,cosine, since
+						    e, e,&      !precision, sensibility to treat sine and cosine
+						    pivot,maxit, & !local pivot position, if missing = 0 , localmaximum iteration if 0... 
+						    side,oddeven, &       ! multiply left or right, odd indeces in parallel or even indices in parallel
+						    rowdim,coldim, &
+                                                    1)	! dimension of the block
+  
+
+  u(pivot) = u_d(pivot) 
+  uu(pivot) = uu_d(pivot) 
+  dd(pivot+1) = dd_d(pivot+1) 
+  print*, maxit, oddeven,side,pivot,abs(u(pivot)),abs(uu(pivot)),abs(dd(pivot+1))
+  do ii = 1,N
+  M (ii,ii) = d_d(ii)
+  end do 
+  do ii = 2,N
+  M (ii,ii-1) = dd_d(ii)
+  end do 
+  do ii = 1,N-1
+  M (ii,ii+2) = uu_d(ii)
+  end do 
+  do ii = 1,N
+  M (ii,ii+1) = u_d(ii)
+  end do 
+  do ii = 1,N
+  M (ii,ii) = d_d(ii)
+  print "(*('('sf6.2xspf6.2x'i)':x))", M(ii,:)
+  !write(*,*), M(ii,:)
+  end do 
+  print*, " "
+  !PRINT*,  maxval(u) 
+  if (it .eq. 20) then 
+  !exit 
+  end if  
+  end do 	
+  !call saxpy<<<grid, tBlock>>>(d_d,u_d,c_d,s_d,dd_d,uu_d, e,sens,pivot,side,oddeven)
+  !y = y_d
+  !write(*,*) 'Max error: ', maxval(abs(y-4.0))
+end program 
