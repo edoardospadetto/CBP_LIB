@@ -20,8 +20,9 @@ void MallocUnif(T* &x, long row, long col, T val) {
 /* if devcount == 0 the number of devices is set to the max available*/
 int cbp_SetDev(cublasXtHandle_t& xt_, int devcount)
 {
+
 	  if(devcount == 0)
-	  { 
+	  {
  		cudaGetDeviceCount ( &devcount ) ;
 	  }
   	  int* devices = (int*) malloc(devcount*sizeof(int));  // add this line
@@ -29,7 +30,9 @@ int cbp_SetDev(cublasXtHandle_t& xt_, int devcount)
   	  {
   		devices[i] = i ;
   	  }
-  	  if(cublasXtDeviceSelect(xt_, 1, devices) != CUBLAS_STATUS_SUCCESS) {printf("set devices fail\n"); return 1;} 
+
+      int code = cublasXtDeviceSelect(xt_, 1, devices);
+  	  if( code != CUBLAS_STATUS_SUCCESS) {printf("set devices fail %s %d: errorcode = %d \n", __FILE__ , __LINE__, code ); return code;}
   	  free(devices);
   	  return 0;
 
@@ -51,13 +54,11 @@ int cbp_auto_gemm(T* A, T*B , T*C, int* dimA, int* dimB, int* dimC, T alpha, T b
 {
 
 	  //cublasXtHandle_t xt_;
-          
+
 	  //if(cublasXtCreate(&xt_) != CUBLAS_STATUS_SUCCESS) {printf("handle create fail\n"); return 1;}
           //cbp_SetDev(xt_, ngpu);
-  
+
   	  cbp_Gemm(A,B,C,dimA[0],dimB[1],dimA[1],xt_,alpha,beta, 0.0 );
 
   return 0;
 }
-
-

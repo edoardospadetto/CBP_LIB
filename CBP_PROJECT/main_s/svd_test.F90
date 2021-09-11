@@ -227,7 +227,7 @@ do kk = 1,50
     		trace = A(ii,ii) + trace !print "(*('('sf8.2xspf8.2x'i)':x))", L(ii, :)
 
      end do
-    write(1111,*,advance="no") dimA(1), abs(trace-trace2), abs((sum(D)-trace)) , abs((D-singular_values))
+    write(1111,*,advance="no") dimA(1),abs(sum(D)),abs(trace-trace2), abs((sum(D**2)-trace)) , abs((D-singular_values))
     end if
 
     deallocate(process_grid)
