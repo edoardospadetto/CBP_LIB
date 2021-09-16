@@ -146,7 +146,7 @@ do kk = 1,20
     end do
     do ii = 1, descriptorB(1)
         do jj = 1, descriptorB(2)
-          localB(ii,jj) = 1.01010101 !  1e5*0.5**(descriptorB(3)+ii-2)
+          localB(ii,jj) = 1e5*0.5**(descriptorB(3)+ii-2)
         end do
     end do
 
@@ -187,7 +187,9 @@ do kk = 1,20
 
     !CHECK RESULTS
     if(rank .eq. 0 ) then
-            print*, nprocs,  abs(maxval(abs(C))), abs(maxval(abs(D)))
+            !print*, nprocs,  abs(maxval(abs(C - (1.01010101**2)*dimA(2) ))), abs(maxval(abs(D - (1.01010101**2)*dimA(2) )))
+	    print*, dimA(1),dimA(2),  abs(maxval(abs(C - 1e5*(1-0.5**(2*dimA(2)))/(1-0.5**2) ) )), abs(maxval(abs(D - 1e5*(1-0.5**(2*dimA(2))) /(1-0.5**2)) ))
+
     end if
 
     !GET BACK INPUT MATRICES
