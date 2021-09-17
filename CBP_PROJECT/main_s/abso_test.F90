@@ -58,6 +58,9 @@ program passm
     CTYPE , allocatable, dimension(:,:) :: localA, localB
     CTYPE , allocatable, dimension(:,:) :: localC
 
+    integer :: block, fc1, fc2
+    CTYPE :: value1 , value2, resultssss
+
 
 
     call MPI_INIT(ierr)
@@ -95,9 +98,9 @@ do kk = 1,20
     dimB=(/0,0/)
     dimC=(/dimA(1), dimB(2)/)
 
-    dimA = kk*2000 + dimA
-    dimB = kk*2000 + dimB
-    dimC = kk*2000 + dimC
+    dimA = kk*500 + dimA
+    dimB = kk*500 + dimB
+    dimC = kk*500 + dimC
 
 
 
@@ -138,15 +141,21 @@ do kk = 1,20
 
     end if
 
+    value1 = 1e2
+    value2 = 1e-3
+    block = 100
+    fc1 = (dimA(2)/block)/2
+    fc2 = (dimA(2)/block)/2+mod((dimA(2)/block),2)
+
     do ii = 1, descriptorA(1)
         do jj = 1, descriptorA(2)
-          !  print*, "in",0.5**(descriptorA(3)+jj-2)
-          localA(ii,jj) = 1.01010101 !1e5*0.5**(descriptorA(4)+jj-2)
+          !  print*, "in",0.**(descriptorA(3)+jj-2)
+          localA(ii,jj) = value1*mod((descriptorA(4)+jj-2)/block,2) + value2*mod(1+(descriptorA(4)+jj-2)/block,2)
         end do
     end do
     do ii = 1, descriptorB(1)
         do jj = 1, descriptorB(2)
-          localB(ii,jj) = 1e5*0.5**(descriptorB(3)+ii-2)
+          localB(ii,jj) =  value1*mod((descriptorB(3)+ii-2)/block,2) + value2*mod(1+(descriptorB(3)+ii-2)/block,2)
         end do
     end do
 
@@ -186,9 +195,11 @@ do kk = 1,20
                      idxrow, idxcol,rank)
 
     !CHECK RESULTS
+     resultssss = block*(fc2*(value2**2)+fc1*(value1**2))
     if(rank .eq. 0 ) then
             !print*, nprocs,  abs(maxval(abs(C - (1.01010101**2)*dimA(2) ))), abs(maxval(abs(D - (1.01010101**2)*dimA(2) )))
-	    print*, dimA(1),dimA(2),  abs(maxval(abs(C - 1e5*(1-0.5**(2*dimA(2)))/(1-0.5**2) ) )), abs(maxval(abs(D - 1e5*(1-0.5**(2*dimA(2))) /(1-0.5**2)) ))
+	    print*, dimA(1),dimA(2),  abs(maxval(abs(C -  resultssss)))/abs(resultssss),  &
+                                abs(maxval(abs(D -  resultssss )))/abs(resultssss) !, "|", (C(1,1), fc1*(value1**2)+fc2*(value2**2))*block
 
     end if
 
