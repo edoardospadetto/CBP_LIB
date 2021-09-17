@@ -137,7 +137,7 @@ do kk = 1,200,10
     call MPI_BARRIER(MPI_COMM_WORLD, ierr)
 
 
-    do ii = 1, 4
+    do ii = 1, ngpu
 
 
 
