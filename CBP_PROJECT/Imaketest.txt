@@ -1,0 +1,15 @@
+pgf90 -x=f90  -Mpreprocess -Mcuda -gpu=rdc -g -c ./src/CBP_lib/cbp_parallel.F90 -I /home/edoardo/lib/Linux_x86_64/21.7/cuda/include -I /home/edoardo/lib/Linux_x86_64/21.7/math_libs/10.2/include -L /home/edoardo/lib/Linux_x86_64/21.7/math_libs/10.2/lib64 -lcublas -lcuda -lcudart  -lcusparse -llapack -o ./build/cbp_parallel.o -D CBPZMPLX
+gcc -g  -I /home/edoardo/lib/Linux_x86_64/21.7/cuda/include -I /home/edoardo/lib/Linux_x86_64/21.7/math_libs/10.2/include -L /home/edoardo/lib/Linux_x86_64/21.7/math_libs/10.2/lib64 -c ./src/CBP_lib/cbp_wrap.cpp -o ./build/cbp_wrap.o -D CBPZMPLX -lblas
+echo 'Compiling Kernel..'
+Compiling Kernel..
+pgf90 -x=f90  -Mpreprocess -Mcuda -gpu=rdc -c -D CBPZMPLX ./src/CBP_lib/kernels.cuf -o ./build/kernels.o
+mpif90 -cpp  -Mcuda -g -c ./src/CBP_lib/cbp_distribute_mod.F90 -o ./build/cbp_distribute_mod.o -D CBPZMPLX
+pgf90 -x=f90  -Mpreprocess -Mcuda -gpu=rdc -g -c ./src/misc_mod.f90 -I /home/edoardo/lib/Linux_x86_64/21.7/cuda/include -I /home/edoardo/lib/Linux_x86_64/21.7/math_libs/10.2/include -L /home/edoardo/lib/Linux_x86_64/21.7/math_libs/10.2/lib64 -lcublas -lcuda -lcudart  -lcusparse -llapack -o ./build/misc_mod.o -D CBPZMPLX
+echo ' '
+ 
+echo Linking..
+Linking..
+echo ' '
+ 
+mpif90 -cpp  -Mcuda -g -c ./temporal_test/mmul4unb_time.F90 -o ./build/mmul4unb_time.o -D CBPZMPLX
+mpif90 -cpp  -Mcuda  -g    ./build/mmul4unb_time.o ./build/misc_mod.o ./build/cbp_parallel.o ./build/cbp_wrap.o ./build/cbp_distribute_mod.o ./build/kernels.o -lstdc++  -I /home/edoardo/lib/Linux_x86_64/21.7/cuda/include -I /home/edoardo/lib/Linux_x86_64/21.7/math_libs/10.2/include -L /home/edoardo/lib/Linux_x86_64/21.7/math_libs/10.2/lib64 -lcublas -lcuda -lcudart  -lcusparse -llapack   -o ./bin/testbmmul4unbZMPLX

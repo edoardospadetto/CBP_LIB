@@ -119,13 +119,13 @@ do kk = 1,200,10
     call cbp_unbalanced_matmul_descriptors(descriptorA, dimA(1), dimA(2), rank, nprocs)
 
 
-    allocate(B(localdimB(1),localdimB(2)))
-    allocate(localC(localdimC(1),localdimC(2)))
-    allocate(localA(localdimA(1),localdimA(2)))
+    allocate(B(10,10))
+    allocate(localC(descriptorA(1),dimB(2)))
+    allocate(localA(descriptorA(1),descriptorA(2)))
 
     localC = CZERO
     localA = CZERO
-    localB = CZERO
+    B = CZERO
 
 
 	call c_random(localA)
@@ -187,7 +187,7 @@ do kk = 1,200,10
 
     !ENDING..
     deallocate (localA)
-    deallocate (localB)
+    deallocate (B)
     deallocate (localC)
 
 

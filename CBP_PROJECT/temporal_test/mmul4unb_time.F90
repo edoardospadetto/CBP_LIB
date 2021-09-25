@@ -98,8 +98,8 @@ program passm
     end if
 
 do kk = 1,200,10
-    dimA=(/500*kk,500*kk/)
-    dimB=(/500*kk,500*kk/)
+    dimA=(/500*kk,10/)
+    dimB=(/10,10/)
     dimC=(/dimA(1), dimB(2)/)
 
 

@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --time=00:15:00        # Walltime in hh:mm:ss
-#SBATCH --nodes=1    # Number of nodes
+#SBATCH --time=00:1:00        # Walltime in hh:mm:ss
+#SBATCH --nodes=4    # Number of nodes
 #SBATCH --ntasks-per-node=1   # Number of MPI ranks per node
 #SBATCH --cpus-per-task=128      # Number of OpenMP threads for each MPI process/rank
 #SBATCH --gres=gpu:4            # gpu
@@ -13,7 +13,5 @@ module load profile/advanced
 module load gnu
 module load hpc-sdk
 module load blas 
-
-
 module load cuda
-mpirun -np 1  -host $SLURM_JOB_NODELIST ./bin/testbmmul4unbZMPLX 1 1 0 4  >  ./out2_folder/unbtest/1mmul.txt
+make temporal  WHICH=mmul4unb NAME=ZMPLX >> Imaketest.txt 2>&1
