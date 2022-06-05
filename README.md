@@ -1,3 +1,3 @@
 # MPI_CUBLASXT
 
-gemm using mpi and cublasxt
+Multi GPU and Multi Node matrix multiplication, actually faster than scalapack for really large matrices ~50,000 entries
